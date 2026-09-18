@@ -1,0 +1,6 @@
+{
+  "name": "Singapore Private Property Prices",
+  "description": "An application stating private residential property prices and transaction metrics across Singapore, with API integration placeholders for backend connection.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
