@@ -1,6 +1,15 @@
 import express, { Request, Response } from 'express';
 import path from 'path';
 import { createServer as createViteServer } from 'vite';
+import uraHandler, {
+  getUraDailyToken,
+  fetchUraResiTransactions,
+  transformUraToProperties,
+  URA_ENDPOINTS,
+} from './api/ura';
+import tokenHandler from './api/token';
+import transactionsHandler from './api/transactions';
+import syncHandler from './api/sync';
 
 const app = express();
 const PORT = 3000;
@@ -333,6 +342,89 @@ app.post('/api/properties/reset', (req: Request, res: Response) => {
     totalInDatabase: 0,
   });
 });
+
+// ==========================================
+// URA DataService Serverless Routes & Sync
+// ==========================================
+
+// 1. Trade AccessKey for Today's Token: /api/token
+app.all('/api/token', (req: Request, res: Response) => {
+  return tokenHandler(req, res);
+});
+
+// 2. Data Calls with AccessKey + Token: /api/transactions
+app.all('/api/transactions', (req: Request, res: Response) => {
+  return transactionsHandler(req, res);
+});
+
+// Unified URA serverless endpoint: /api/ura
+app.all('/api/ura', (req: Request, res: Response) => {
+  return uraHandler(req, res);
+});
+
+// Serverless Sync endpoint: /api/sync
+app.all('/api/sync', (req: Request, res: Response) => {
+  return syncHandler(req, res);
+});
+
+// Direct Ingestion: Fetch from URA and sync directly into the application's active store
+app.post('/api/ura/sync', async (req: Request, res: Response) => {
+  const customAccessKey =
+    req.headers?.['x-ura-accesskey'] ||
+    req.headers?.['accesskey'] ||
+    req.body?.accessKey ||
+    req.query?.accessKey;
+
+  const batch = parseInt(req.body?.batch || req.query?.batch || '1', 10);
+
+  try {
+    // 1. Trade AccessKey for today's token
+    const tokenInfo = await getUraDailyToken(String(customAccessKey || ''));
+
+    // 2. Data call with both AccessKey and Token
+    const uraResponse = await fetchUraResiTransactions({
+      batch,
+      accessKey: String(customAccessKey || ''),
+      token: tokenInfo.token,
+    });
+
+    // 3. Transform to application property format
+    const transformed = transformUraToProperties(uraResponse);
+
+    if (transformed.length === 0) {
+      res.json({
+        success: true,
+        message: `URA DataService query succeeded (Batch ${batch}), but 0 residential transactions were returned in the dataset.`,
+        inserted: 0,
+        totalInDatabase: propertiesStore.length,
+        tokenUsed: tokenInfo.token,
+        cachedToken: tokenInfo.cached,
+      });
+      return;
+    }
+
+    // Append to in-memory store
+    propertiesStore.push(...transformed);
+
+    res.json({
+      success: true,
+      message: `Successfully synchronized ${transformed.length} private property transactions from URA DataService (Batch ${batch}).`,
+      batch,
+      inserted: transformed.length,
+      totalInDatabase: propertiesStore.length,
+      tokenDate: tokenInfo.dateStr,
+      cachedTokenUsed: tokenInfo.cached,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error: any) {
+    res.status(400).json({
+      success: false,
+      error: error.message || 'Failed to sync URA dataset.',
+      help: 'Verify URA_ACCESS_KEY in environment variables or pass it in request.',
+    });
+  }
+});
+
 
 // Vite middleware for development & Static serving for production
 async function startServer() {

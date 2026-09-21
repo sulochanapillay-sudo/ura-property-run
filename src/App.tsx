@@ -249,6 +249,7 @@ export default function App() {
         isPinging={isPinging}
         onLoadSampleData={handleLoadSampleData}
         onClearData={handleClearData}
+        onDataChanged={() => loadData(filters)}
       />
 
       <DistrictGuideModal

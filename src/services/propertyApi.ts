@@ -187,9 +187,70 @@ export async function resetBackendData(): Promise<ApiResponse<{ cleared: boolean
 }
 
 /**
- * Sample verification payload conforming to Singapore URA/Realis standard
- * Provided purely for optional developer schema testing before live database connection.
+ * URA DataService Serverless API Client Functions
  */
+
+export async function getUraStatus(): Promise<any> {
+  const url = `${getBaseUrl()}/api/ura?action=status`;
+  const res = await fetch(url);
+  return await res.json();
+}
+
+export async function tradeUraToken(accessKey?: string, force = false): Promise<{
+  status: string;
+  token?: string;
+  cached?: boolean;
+  message?: string;
+  error?: string;
+}> {
+  const url = `${getBaseUrl()}/api/token${force ? '?force=true' : ''}`;
+  const headers: Record<string, string> = { 'Accept': 'application/json' };
+  if (accessKey) {
+    headers['AccessKey'] = accessKey;
+  }
+  const res = await fetch(url, { headers });
+  return await res.json();
+}
+
+export async function fetchUraBatchTransactions(
+  batch = 1,
+  accessKey?: string,
+  token?: string
+): Promise<any> {
+  const url = `${getBaseUrl()}/api/transactions?batch=${batch}`;
+  const headers: Record<string, string> = { 'Accept': 'application/json' };
+  if (accessKey) headers['AccessKey'] = accessKey;
+  if (token) headers['Token'] = token;
+
+  const res = await fetch(url, { headers });
+  return await res.json();
+}
+
+export async function syncUraDataset(
+  batch = 1,
+  accessKey?: string
+): Promise<{
+  success: boolean;
+  message: string;
+  inserted?: number;
+  totalInDatabase?: number;
+  error?: string;
+}> {
+  const url = `${getBaseUrl()}/api/ura/sync`;
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'Accept': 'application/json',
+  };
+  if (accessKey) headers['AccessKey'] = accessKey;
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ batch, accessKey }),
+  });
+  return await res.json();
+}
+
 export const SAMPLE_VERIFICATION_PAYLOAD: SingaporeProperty[] = [
   {
     id: 'sg-demo-01',
